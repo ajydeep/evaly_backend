@@ -1,6 +1,8 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,3 +11,219 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum QuestionType {
+  MCQ 
+  MULTI
+  NAT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum SessionMode {
+  PRACTICE
+  EXAM
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+// ─────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(STUDENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+
+  @@index([email])
+}
+
+// ─────────────────────────────────────────
+// SUBJECT & CONCEPT
+// ─────────────────────────────────────────
+
+model Subject {
+  id          String    @id @default(uuid())
+  name        String    @unique  
+  code        String    @unique   // "OS", "DBMS"
+  createdAt   DateTime  @default(now())
+
+  concepts    Concept[]
+  questions   Question[]
+}
+
+model Concept {
+  id          String    @id @default(uuid())
+  name        String
+  subjectId   String
+  subject     Subject   @relation(fields: [subjectId], references: [id])
+  createdAt   DateTime  @default(now())
+
+  questions   Question[]
+
+  @@unique([name, subjectId])
+  @@index([subjectId])
+}
+
+// ─────────────────────────────────────────
+// QUESTION BANK
+// ─────────────────────────────────────────
+
+model Question {
+  id              String        @id @default(uuid())
+  text            String        // text
+  type            QuestionType
+  difficulty      Difficulty
+  marks           Float         @default(1)
+  negativeMarks   Float         @default(0)   //stored as positive
+  explanation     String?
+  subjectId       String
+  subject         Subject       @relation(fields: [subjectId], references: [id])
+  conceptId       String?
+  concept         Concept?      @relation(fields: [conceptId], references: [id])
+  natAnswer       Float?        // * 
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  options         Option[]
+  hints           Hint[]
+  sessionQuestions SessionQuestion[]
+
+  @@index([subjectId, difficulty])
+  @@index([conceptId])
+  @@index([type])
+}
+
+model Option {
+  id          String    @id @default(uuid())
+  text        String
+  isCorrect   Boolean   @default(false)
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order       Int     
+
+  @@index([questionId])
+}
+
+model Hint {
+  id          String    @id @default(uuid())
+  text        String
+  order       Int       //order: 1st,2nd
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+// ─────────────────────────────────────────
+// SESSION
+// ─────────────────────────────────────────
+
+model Session {
+  id              String        @id @default(uuid())
+  mode            SessionMode
+  status          SessionStatus @default(IN_PROGRESS)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+
+  // timing
+  startedAt       DateTime      @default(now())
+  submittedAt     DateTime?
+  durationSeconds Int?          // for exam mode: total allowed time in sec
+
+  // exam mode config
+  totalMarks      Float?
+  negativeMarking Boolean       @default(false)
+
+  // computed on submit
+  score           Float?
+  accuracy        Float?        // in % 0-100
+  timeTakenSeconds Int?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sessionQuestions SessionQuestion[]
+
+  @@index([userId, mode])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// SESSION QUESTIONS
+// links a session to its questions with order
+// ─────────────────────────────────────────
+
+model SessionQuestion {
+  id          String    @id @default(uuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id])
+  order       Int       // question number in this session
+  sectionName String?   // for exam mode: "OS", "DBMS"
+
+  attempt     Attempt?
+
+  @@unique([sessionId, questionId])
+  @@unique([sessionId, order])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────
+// ATTEMPT
+// one row per question per session
+// ─────────────────────────────────────────
+
+model Attempt {
+  id                String          @id @default(uuid())
+  sessionQuestionId String          @unique
+  sessionQuestion   SessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+
+  //student's answer
+  selectedOptionIds String[]        // for MCQ/MULTI: array of option IDs selected
+  natResponse       Float? 
+
+  // grading
+  isCorrect         Boolean?
+  marksAwarded      Float?          // can be negative
+
+  // behaviour tracking
+  timeSpentSeconds  Int             // how long they spent on this question
+  hintsUsed         Int             @default(0)  // how many hints revealed
+  isSkipped         Boolean         @default(false)
+
+  // for practice mode retry
+  attemptNumber     Int             @default(1)  // 1 = first try, 2 = retry, etc.
+
+  createdAt         DateTime        @default(now())
+
+  @@index([sessionQuestionId])
+}
+
+
