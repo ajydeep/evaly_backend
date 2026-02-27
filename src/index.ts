@@ -15,8 +15,25 @@ const app = express()
 const PORT = process.env.PORT || 5001
 
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://evaly.in',
+  'https://www.evaly.in',
+]
+/*  */
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+}))
+/*  */
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
+// app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
 app.use(express.json())
 app.use(morgan('dev'))
 
