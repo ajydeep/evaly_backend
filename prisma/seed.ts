@@ -49,6 +49,12 @@ async function main() {
     update: {},
     create: { name: 'Paging', subjectId: os.id },
   })
+  const segmentation = await prisma.concept.upsert({
+    where: { name_subjectId: { name: 'Segmentation', subjectId: os.id } },
+    update: {},
+    create: { name: 'Segmentation', subjectId: os.id },
+  })
+  
 
   const virtualMemory = await prisma.concept.upsert({
     where: { name_subjectId: { name: 'Virtual Memory', subjectId: os.id } },
